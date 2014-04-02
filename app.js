@@ -55,7 +55,7 @@ function getServiceHost(servicename, callback) {
         console.log('Reponse: ', response.statusCode, ' from url: ', url);
         var body = '';
         response.on('data', function(chunk){
-            console.log('getServiceHost() response.on("data"): data=' + chunk);
+            console.log('getServiceHost() response.on("data"): chunk=' + chunk);
             body += chunk;
         });
         
@@ -65,7 +65,13 @@ function getServiceHost(servicename, callback) {
 
         response.on('end', function() {
             console.log('getServiceHost() response.on("end")');
-            callback(body.host);
+            hostResponse = JSON.parse(body);
+            console.log('getServiceHost() response.on("end") body=' + body);
+             console.log('getServiceHost() response.on("end") hostResponse=' + JSON.stringify(hostResponse));
+             console.dir( hostResponse);
+            console.log('getServiceHost() response.on("end") hostResponse.host=' + hostResponse['host']);
+             console.log('getServiceHost() response.on("end") hostResponse.host=' + hostResponse.host);
+            callback(hostResponse.host);
         });
     };
     
@@ -73,6 +79,7 @@ function getServiceHost(servicename, callback) {
    var registryRequest = http.request(options, registryCallback);
     registryRequest.on('error', function(e){
         console.log('getServiceHost() registryRequest.on("error") Error: ', e.message);
+        callback('');
     });
     
     console.log('getServiceHost() creating request with options=' + JSON.stringify(options));
@@ -107,6 +114,7 @@ function proxyRequest(clientRequest, clientResponse) {
                 "x-forwarded-for": clientRequest.clientIp
             });
 
+         console.log('proxyRequest() creating request for host "' + host + '" ' + options.method + ' http://' + options.hostname + ':' + options.port + options.path);
             var serviceRouteRequest = http.request(options, 
                                                 _serviceResponseHandler(clientRequest, clientResponse, options, host, requestUrl));
 
