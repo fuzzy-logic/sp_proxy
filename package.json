@@ -1,6 +1,6 @@
 {
-    "name": "spaas_proxy",
-    "description": "Reverse Proxy for Simple PaaS",
+    "name": "sp_proxy",
+    "description": "SP Reverse Proxy",
     "version": "0.0.1",
     "private": true,
     "scripts": {
