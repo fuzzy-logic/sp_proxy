@@ -4,10 +4,10 @@ var _ = require('underscore');
 
 
 
-var port = process.env.SP_PROXY_PORT || 80;
+var port = process.env.SP_PROXY_PORT || 8080;
 var BAD_GATEWAY_RESPONSE_CODE = 502;
 var X_FORWARDED_FOR_HEADER = 'x-forwarded-for';
-var endPointPort = 80;
+var endPointPort = 3000;
 
 http.createServer(proxyHandler).listen(port, _httpStartupComplete);
 
@@ -31,43 +31,102 @@ function proxyHandler(req, res) {
     handleRequest(req, res);
 }
 
-
 function handleRequest(clientRequest, clientResponse) {
-    'use strict';
+    var servicename = clientRequest.headers.host;   
+     console.log('handleRequest() servicename=' + servicename)
+    getServiceHost(servicename, proxyRequest(clientRequest, clientResponse) );
+}
 
-  var requestUrl = url.parse(clientRequest.url, true, false);
-   var host = clientRequest.headers.host;
 
-    var options = {
-        method: clientRequest.method,
-        hostname: host,
-        port: endPointPort,
-        path: requestUrl.path,
-        headers: clientRequest.headers
-    };
-
-    _.extend(options.headers, {
-        host: host,
-        "x-forwarded-for": clientRequest.clientIp
-    });
-
-    var serviceRouteRequest = http.request(options, _serviceResponseHandler(clientRequest, clientResponse, options, host, requestUrl));
-
+function getServiceHost(servicename, callback) {
+    console.log('getServiceHost() servicename=' + servicename);
+     var url = 'http://localhost:8888/service';
     
-   serviceRouteRequest.on(REQUEST_RESPONSE_EVENTS.ERROR, function (error) {
-        console.log("handleRequest() on error");
-        clientResponse.statusCode = BAD_GATEWAY_RESPONSE_CODE;
-        clientResponse.end();
-    });
+     var options = {
+        method: 'GET',
+        hostname: 'localhost',
+        host: 'localhost',
+        port: 8888,
+        path: '/service/' + servicename + '/host/next',
+        headers: ['Accept: application/json']
+    };
+    
+    registryCallback = function(response) {
+        console.log('Reponse: ', response.statusCode, ' from url: ', url);
+        var body = '';
+        response.on('data', function(chunk){
+            console.log('getServiceHost() response.on("data"): data=' + chunk);
+            body += chunk;
+        });
+        
+         response.on('error', function(chunk){
+            console.log('getServiceHost() response.on("error")');
+        });
 
-    clientRequest.on(REQUEST_RESPONSE_EVENTS.DATA, function (data) {
-        serviceRouteRequest.write(data);
+        response.on('end', function() {
+            console.log('getServiceHost() response.on("end")');
+            callback(body.host);
+        });
+    };
+    
+    
+   var registryRequest = http.request(options, registryCallback);
+    registryRequest.on('error', function(e){
+        console.log('getServiceHost() registryRequest.on("error") Error: ', e.message);
     });
+    
+    console.log('getServiceHost() creating request with options=' + JSON.stringify(options));
+    console.log('getServiceHost() creating request  ' + options.method + 
+                ' http://' + options.hostname + ':' + options.port + options.path);
+    
+    registryRequest.end();
+    
+}
 
-    clientRequest.on(REQUEST_RESPONSE_EVENTS.END, function () {
-        serviceRouteRequest.end();
-       console.log("end");
-    });
+
+function proxyRequest(clientRequest, clientResponse) {
+    'use strict';
+   console.log('proxyRequest() returning curried function');
+  
+    
+    return function(host) {  
+            console.log('proxyRequest() host=' + host);
+          var requestUrl = url.parse(clientRequest.url, true, false);
+           //var host = clientRequest.headers.host;
+
+            var options = {
+                method: clientRequest.method,
+                hostname: host,
+                port: endPointPort,
+                path: requestUrl.path,
+                headers: clientRequest.headers
+            };
+
+            _.extend(options.headers, {
+                host: host,
+                "x-forwarded-for": clientRequest.clientIp
+            });
+
+            var serviceRouteRequest = http.request(options, 
+                                                _serviceResponseHandler(clientRequest, clientResponse, options, host, requestUrl));
+
+
+           serviceRouteRequest.on(REQUEST_RESPONSE_EVENTS.ERROR, function (error) {
+                console.log("handleRequest() on error");
+                clientResponse.statusCode = BAD_GATEWAY_RESPONSE_CODE;
+                clientResponse.end();
+            });
+
+            clientRequest.on(REQUEST_RESPONSE_EVENTS.DATA, function (data) {
+                serviceRouteRequest.write(data);
+            });
+
+            clientRequest.on(REQUEST_RESPONSE_EVENTS.END, function () {
+                serviceRouteRequest.end();
+               console.log("end");
+            });
+        
+    }
 
 }
 
