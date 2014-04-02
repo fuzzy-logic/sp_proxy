@@ -1,45 +1,44 @@
-http = require('http');
+var http = require('http');
 var url = require('url');
 var _ = require('underscore');
 
+/*
+ * CORE CONCEPTS
+ *
+ * Client - The source of the original request the proxy is responding to 
+ * Proxy - This service
+ * Registry - The service containing mappings for end point service-name to end point hostname/port 
+ * End Point - The service the client wishes to contact
+ *
+ *
+ */
 
+
+
+var proxyPort = process.env.SP_PROXY_PORT || 8080;
 var registryPort = process.env.SP_REGISTRY_PORT || 8888;
-var port = process.env.SP_PROXY_PORT || 8080;
 var registryHost = process.env.SP_REGISTRY_HOST || 'localhost';
 var BAD_GATEWAY_RESPONSE_CODE = 502;
-var X_FORWARDED_FOR_HEADER = 'x-forwarded-for';
 
-http.createServer(proxyHandler).listen(port, _httpStartupComplete);
+http.createServer(coreHandler).listen(proxyPort, httpStartupComplete);
 
-
-var REQUEST_RESPONSE_EVENTS = {
-    ERROR: 'error',
-    DATA: 'data',
-    END: 'end',
-    CLOSE: 'close'
-};
-
-
-function _httpStartupComplete() {
+function httpStartupComplete() {
     'use strict';
-    console.log("starting http server on port " + port);
+    console.log("starting proxy service http server on port " + proxyPort);
 }
 
-function proxyHandler(req, res) {
+function coreHandler(clientRequest, clientResponse) {
     'use strict';
-    req.clientIp = req.headers[X_FORWARDED_FOR_HEADER] || req.connection.remoteAddress;
-    handleRequest(req, res);
-}
-
-function handleRequest(clientRequest, clientResponse) {
+    clientRequest.clientIp = clientRequest.headers['x-forwarded-for'] || clientRequest.connection.remoteAddress;
     var servicename = clientRequest.headers.host;   
-     console.log('handleRequest() servicename=' + servicename)
-    getServiceHost(servicename, proxyRequest(clientRequest, clientResponse) );
+    console.log('coreHandler() client request for servicename=' + servicename);
+    var proxyCallbackHandler = proxyRequest(clientRequest, clientResponse);
+    registryLookup(servicename,  proxyCallbackHandler);
 }
 
 
-function getServiceHost(servicename, callback) {
-    console.log('getServiceHost() servicename=' + servicename);
+function registryLookup(servicename, proxyCallbackHandler) {
+    console.log('registryLookup() servicename=' + servicename);
    
     
      var options = {
@@ -56,31 +55,31 @@ function getServiceHost(servicename, callback) {
         var body = '';
         
         response.on('data', function(chunk){
-            console.log('getServiceHost() response.on("data"): chunk=' + chunk);
+            console.log('registryLookup() response.on("data"): chunk=' + chunk);
             body += chunk;
         });
         
         response.on('error', function(chunk){
-            console.log('getServiceHost() response.on("error")');
+            console.log('registryLookup() response.on("error")');
         });
 
         response.on('end', function() {
             //console.log('getServiceHost() response.on("end")');
             hostResponse = JSON.parse(body);
-             console.log('getServiceHost() response.on("end") hostResponse.host=' + hostResponse.host);
-            callback(hostResponse.host, hostResponse.port);
+             console.log('registryLookup() response.on("end") hostResponse.host=' + hostResponse.host);
+            proxyCallbackHandler(hostResponse.host, hostResponse.port);
         });
     };
     
     
    var registryRequest = http.request(options, registryCallback);
     registryRequest.on('error', function(e){
-        console.log('getServiceHost() registryRequest.on("error") Error: ', e.message);
-        callback('');
+        console.log('registryLookup() registryRequest.on("error") Error: ', e.message);
+        //_sendBadGateway();
     });
     
-    console.log('getServiceHost() creating request with options=' + JSON.stringify(options));
-    console.log('getServiceHost() creating request  ' + options.method + ' http://' + options.hostname + ':' + options.port + options.path);
+    console.log('registryLookup() creating request with options=' + JSON.stringify(options));
+    console.log('registryLookup() creating request  ' + options.method + ' http://' + options.hostname + ':' + options.port + options.path);
     
     registryRequest.end();
     
@@ -112,24 +111,25 @@ function proxyRequest(clientRequest, clientResponse) {
             });
 
          console.log('proxyRequest() creating request for host "' + host + '" ' + options.method + ' http://' + host + ':' + options.port + options.path);
-            var serviceRouteRequest = http.request(options, 
-                                                _serviceResponseHandler(clientRequest, clientResponse, options, host, requestUrl));
+            
+        var endPointResponseFunction = endPointResponseHandler(clientRequest, clientResponse, options, host, requestUrl)
+        var endPointRequest = http.request(options, endPointResponseFunction);
 
 
-           serviceRouteRequest.on(REQUEST_RESPONSE_EVENTS.ERROR, function (error) {
-                console.log("proxyRequest() serviceRouteRequest.on('error')");
+           endPointRequest.on('error', function (error) {
+                console.log("proxyRequest() endPointRequest.on('error')");
                 clientResponse.statusCode = BAD_GATEWAY_RESPONSE_CODE;
                 clientResponse.end();
             });
 
-            clientRequest.on(REQUEST_RESPONSE_EVENTS.DATA, function (data) {
-                console.log("proxyRequest() serviceRouteRequest.on('data') data=" + data);
-                serviceRouteRequest.write(data);
+            clientRequest.on('data', function (data) {
+                console.log("proxyRequest() endPointRequest.on('data') data=" + data);
+                endPointRequest.write(data);
             });
 
-            clientRequest.on(REQUEST_RESPONSE_EVENTS.END, function () {
-                console.log("proxyRequest() serviceRouteRequest.on('end')");
-                serviceRouteRequest.end();
+            clientRequest.on('end', function () {
+                console.log("proxyRequest() endPointRequest.on('end')");
+                endPointRequest.end();
               
             });
         
@@ -146,36 +146,36 @@ function _sendBadGateway(response) {
 
 
 
-function _serviceResponseHandler(clientRequest, clientResponse, options, host, requestUrl) {
+function endPointResponseHandler(clientRequest, clientResponse, options, host, requestUrl) {
 
-   console.log("_serviceResponseHandler() host=" + host);
+   console.log("endPointResponseHandler() host=" + host);
 
-    return function (serviceRouteResponse) {
-        clientResponse.statusCode = serviceRouteResponse.statusCode;
+    return function (endPointResponse) {
+        clientResponse.statusCode = endPointResponse.statusCode;
 
-        _.each(serviceRouteResponse.headers, function (headerValue, headerKey) {
+        _.each(endPointResponse.headers, function (headerValue, headerKey) {
             clientResponse.setHeader(headerKey, headerValue);
         });
 
-        serviceRouteResponse.on(REQUEST_RESPONSE_EVENTS.ERROR, function (error) {
-             console.log("_serviceResponseHandler() serviceRouteReques.on('error')");
+        endPointResponse.on('error', function (error) {
+             console.log("endPointResponseHandler() serviceRouteReques.on('error')");
             clientResponse.connection.destroy();
 
         });
 
-        serviceRouteResponse.on(REQUEST_RESPONSE_EVENTS.DATA, function (chunk) {
-            console.log("_serviceResponseHandler() serviceRouteReques.on('data') chunk=" + chunk);
+        endPointResponse.on('data', function (chunk) {
+            console.log("endPointResponseHandler() serviceRouteReques.on('data') chunk=" + chunk);
             clientResponse.write(chunk);
         });
 
-        serviceRouteResponse.on(REQUEST_RESPONSE_EVENTS.END, function () {
-            console.log("_serviceResponseHandler() serviceRouteReques.on('end')");
+        endPointResponse.on('end', function () {
+            console.log("endPointResponseHandler() serviceRouteReques.on('end')");
             clientResponse.end();
 
         });
 
-        serviceRouteResponse.on(REQUEST_RESPONSE_EVENTS.CLOSE, function () {
-             console.log("_serviceResponseHandler() serviceRouteReques.on('close')");
+        endPointResponse.on('close', function () {
+             console.log("endPointResponseHandler() serviceRouteReques.on('close')");
             clientResponse.connection.destroy();
         });
     }
