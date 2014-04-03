@@ -64,9 +64,18 @@ function registryLookup(servicename, proxyCallbackHandler) {
         });
 
         response.on('end', function() {
-            //console.log('getServiceHost() response.on("end")');
-            hostResponse = JSON.parse(body);
-             console.log('registryLookup() response.on("end") hostResponse.host=' + hostResponse.host);
+            console.log('registryLookup() response.on("end") body=' + body);
+            console.log('registryLookup() response.on("end") body=' + body.constructor);
+            var hostResponse = {};       
+            try {
+                hostResponse = JSON.parse(body);
+            } catch (e) {
+                console.log('registryLookup() response.on("end") catch error=' + e);
+                hostResponse = body;
+            }
+                
+            
+            console.log('registryLookup() response.on("end") hostResponse.host=' + hostResponse.host);
             proxyCallbackHandler(hostResponse.host, hostResponse.port);
         });
     };
@@ -158,24 +167,24 @@ function endPointResponseHandler(clientRequest, clientResponse, options, host, r
         });
 
         endPointResponse.on('error', function (error) {
-             console.log("endPointResponseHandler() serviceRouteReques.on('error')");
+            console.log("endPointResponseHandler() endPointResponse.on('error')");
             clientResponse.connection.destroy();
 
         });
 
         endPointResponse.on('data', function (chunk) {
-            console.log("endPointResponseHandler() serviceRouteReques.on('data') chunk=" + chunk);
+            console.log("endPointResponseHandler() endPointResponse.on('data') clientResponse.write chunk=" + chunk);
             clientResponse.write(chunk);
         });
 
         endPointResponse.on('end', function () {
-            console.log("endPointResponseHandler() serviceRouteReques.on('end')");
+            console.log("endPointResponseHandler() endPointResponse.on('end') calling clientResponse.end() ");
             clientResponse.end();
 
         });
 
         endPointResponse.on('close', function () {
-             console.log("endPointResponseHandler() serviceRouteReques.on('close')");
+             console.log("endPointResponseHandler() endPointResponse.on('close')");
             clientResponse.connection.destroy();
         });
     }
