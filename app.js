@@ -13,18 +13,28 @@ var _ = require('underscore');
  *
  */
 
-
+/*
+Docker Variables"
+  DB_PORT=tcp://172.17.0.8:6379
+  SP_REGISTRY_PORT_8888_TCP=tcp://172.17.0.8:8888
+  SP_REGISTRY_PORT_8888_TCP_PROTO=tcp
+  SP_REGISTRY_PORT_8888_TCP_ADDR=172.17.0.8
+  SP_REGISTRY_PORT_8888_TCP_PORT=8888
+*/
 
 var proxyPort = process.env.SP_PROXY_PORT || 8080;
-var registryPort = process.env.SP_REGISTRY_PORT || 8888;
-var registryHost = process.env.SP_REGISTRY_HOST || 'localhost';
+var registryPort = process.env.SP_REGISTRY_PORT_8888_TCP_PORT || 8888;
+var registryHost = process.env.SP_REGISTRY_PORT_8888_TCP_ADDR || 'localhost';
 var BAD_GATEWAY_RESPONSE_CODE = 502;
 
 http.createServer(coreHandler).listen(proxyPort, httpStartupComplete);
 
 function httpStartupComplete() {
     'use strict';
-    console.log("starting proxy service http server on port " + proxyPort);
+    console.log("env variables: " + JSON.stringify(process.env));
+    console.log("env variable SP_REGISTRY_PORT_8888_TCP_PORT: " + process.env.SP_REGISTRY_PORT_8888_TCP_PORT);
+    console.log("env variables SP_REGISTRY_PORT_8888_TCP_ADDR: " + process.env.SP_REGISTRY_PORT_8888_TCP_ADDR);
+    console.log("starting sp proxy service http server on port " + proxyPort);
 }
 
 function coreHandler(clientRequest, clientResponse) {
