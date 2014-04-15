@@ -23,8 +23,8 @@ Docker Variables"
 */
 
 var proxyPort = process.env.SP_PROXY_PORT || 8080;
-var registryPort = process.env.SP_REGISTRY_PORT_8888_TCP_PORT || 8888;
-var registryHost = process.env.SP_REGISTRY_PORT_8888_TCP_ADDR || 'localhost';
+var registryPort = process.env.SP_REGISTRY_PORT || 8888;
+var registryHost = process.env.SP_REGISTRY_HOST || 'localhost';
 var BAD_GATEWAY_RESPONSE_CODE = 502;
 
 http.createServer(coreHandler).listen(proxyPort, httpStartupComplete);
